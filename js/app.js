@@ -9,6 +9,7 @@
   let planCache = { data: null, key: '', value: null };
   let toast = null;
   let toastTimer = null;
+  let toastPlain = false;
 
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -17,8 +18,9 @@
     view = v; render(); window.scrollTo(0, 0);
     if (v.name === 'edit') { const n = document.getElementById('f-name'); if (n) n.focus(); }
   }
-  function showToast(html) {
+  function showToast(html, plain) {
     toast = html;
+    toastPlain = !!plain;
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => { toast = null; render(); }, 9000);
   }
@@ -60,8 +62,9 @@
   function rosterView() {
     const list = L.sortedByTotal(data.disciples);
     const body = list.length
-      ? '<div class="grid">' + list.map((d) => `<article class="card" data-act="pick" data-id="${d.id}">
-          <div class="head"><button class="pick" data-act="pick" data-id="${d.id}" aria-label="Chọn ${esc(d.name)} để trục xuất">${ident(d.name, d.total, d.role)}</button>
+      ? '<div class="grid">' + list.map((d) => `<article class="card${d.locked ? ' locked' : ''}" data-act="pick" data-id="${d.id}">
+          <div class="head"><button class="pick" data-act="pick" data-id="${d.id}" aria-label="${d.locked ? esc(d.name) + ' đang bị khóa, không thể trục xuất' : 'Chọn ' + esc(d.name) + ' để trục xuất'}">${ident(d.name, d.total, d.role)}</button>
+            <button class="ibtn lockbtn${d.locked ? ' on' : ''}" data-act="lock" data-id="${d.id}" aria-pressed="${!!d.locked}" aria-label="${d.locked ? 'Mở khóa ' : 'Khóa '}${esc(d.name)}" title="${d.locked ? 'Đang khóa (không bị trục xuất). Bấm để mở khóa' : 'Khóa: không bị trục xuất'}">${I('lock', 26)}</button>
             ${iconBtn('edit', 'edit', 'Sửa ' + esc(d.name), `data-id="${d.id}"`)}</div>
           ${cells(d.levels)}</article>`).join('') + '</div>'
       : `<div class="empty">${I('scroll', 42)}<p>Thêm đệ tử đầu tiên</p><button class="btn primary" data-act="add">${I('plus', 16)}Thêm</button></div>`;
@@ -293,7 +296,7 @@
     app.classList.toggle('sub', !ROOT_VIEWS.includes(view.name)); // màn con: ẩn thanh dưới trên điện thoại
     if (view.name === 'theme') T.preloadFonts();
     app.innerHTML = html + tabs(view.name) +
-      (toast ? `<div class="toast" role="status">${I('check', 16)}<span>${toast}</span><button data-act="undo">${I('undo', 16)}Hoàn tác</button></div>` : '');
+      (toast ? `<div class="toast" role="status">${I('check', 16)}<span>${toast}</span>${toastPlain ? '' : `<button data-act="undo">${I('undo', 16)}Hoàn tác</button>`}</div>` : '');
   }
 
   function saveEdit() {
@@ -362,7 +365,19 @@
       case 'theme-reset': T.reset(); break;
       case 'add': hideToast(); go({ name: 'edit', id: null }); break;
       case 'edit': hideToast(); go({ name: 'edit', id: t.dataset.id }); break;
-      case 'pick': hideToast(); go({ name: 'transfer', id: t.dataset.id }); break;
+      case 'lock': {
+        const x = data.disciples.find((d) => d.id === t.dataset.id);
+        if (!x) break;
+        setData(L.setLocked(data, x.id, !x.locked));
+        hideToast();
+        render();
+        break;
+      }
+      case 'pick': {
+        const x = data.disciples.find((d) => d.id === t.dataset.id);
+        if (x && x.locked) { showToast(`<b>${esc(x.name)}</b> đang bị khóa, không thể trục xuất`, true); render(); break; }
+        hideToast(); go({ name: 'transfer', id: t.dataset.id }); break;
+      }
       case 'save': saveEdit(); break;
       case 'delete':
         if (!armed(t, 'Bấm lần nữa để xóa')) break;

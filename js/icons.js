@@ -32,6 +32,7 @@
     moon: '<path d="M20 14.500A8 8 0 0 1 9.500 4 8 8 0 1 0 20 14.500z"/>',
     auto: '<rect x="3" y="4.500" width="18" height="12" rx="2"/><path d="M8.500 20h7M12 16.500V20"/>',
     plan: '<path d="M9.500 6h11M9.500 12h11M9.500 18h11"/><path d="M3.500 6l1.300 1.300L7.500 4.500M3.500 12l1.300 1.300 2.700-2.800M3.500 18l1.300 1.300 2.700-2.800"/>',
+    lock: '<rect x="5" y="11" width="14" height="9.500" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
     scroll: '<path d="M6 4h12v13a3 3 0 0 1-3 3H6a3 3 0 0 0 3-3V7"/><path d="M6 4a3 3 0 0 0-3 3h6"/><path d="M12 9h3.500M12 12.500h3.500"/>',
   };
   const SKILL_ICONS = ['sprout', 'coin', 'anvil', 'heart', 'cauldron', 'talisman', 'formation', 'orb'];

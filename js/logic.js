@@ -68,7 +68,7 @@
   function transfer(data, srcId, recId) {
     const src = data.disciples.find((d) => d.id === srcId);
     const rec = data.disciples.find((d) => d.id === recId);
-    if (!src || !rec || src.id === rec.id) return { data, gain: 0, ok: false };
+    if (!src || !rec || src.id === rec.id || src.locked) return { data, gain: 0, ok: false };
     const g = gain(src, rec);
     const next = withHistory(data, (d) => {
       const s = d.disciples.find((x) => x.id === srcId);
@@ -84,7 +84,7 @@
   /** Đệ tử cuối cùng (không còn người nhận) vẫn được đưa vào danh sách chờ với cấp về 0. */
   function retire(data, srcId) {
     const src = data.disciples.find((d) => d.id === srcId);
-    if (!src) return data;
+    if (!src || src.locked) return data;
     return withHistory(data, (d) => {
       d.disciples = d.disciples.filter((x) => x.id !== srcId);
       d.expelled.push({ id: src.id, name: src.name, total: src.total, done: false });
@@ -102,7 +102,7 @@
         role: '',
       };
       const idx = d.disciples.findIndex((x) => x.id === clean.id);
-      if (idx >= 0) { clean.role = d.disciples[idx].role || ''; d.disciples[idx] = clean; }
+      if (idx >= 0) { clean.role = d.disciples[idx].role || ''; if (d.disciples[idx].locked) clean.locked = true; d.disciples[idx] = clean; }
       else d.disciples.push(clean);
       return d;
     });
@@ -138,6 +138,17 @@
     return withHistory(data, (d) => { setRole(d, id, ''); return d; });
   }
 
+  /**
+   * Khóa / mở khóa một đệ tử (phục vụ cốt truyện): người bị khóa không thể bị trục xuất,
+   * không bị đưa vào kế hoạch truyền công làm người truyền, nhưng vẫn có thể nhận công.
+   */
+  function setLocked(data, id, locked) {
+    const x = data.disciples.find((y) => y.id === id);
+    const v = !!locked;
+    if (!x || !!x.locked === v) return data;
+    return withHistory(data, (d) => { const y = d.disciples.find((z) => z.id === id); if (v) y.locked = true; else delete y.locked; return d; });
+  }
+
   function remove(data, id) {
     return withHistory(data, (d) => {
       d.disciples = d.disciples.filter((x) => x.id !== id);
@@ -171,6 +182,7 @@
           id: d.id, name: d.name, total: Math.max(0, Math.floor(Number(d.total)) || 0),
           levels: SKILLS.map((_, i) => clampLevel(d.levels && d.levels[i])),
           role: cleanRole(legacy(d.role)),
+          ...(d.locked === true ? { locked: true } : {}),
         })),
         expelled: raw.expelled.filter(ok).map((d) => ({
           id: d.id, name: d.name, total: Math.max(0, Math.floor(Number(d.total)) || 0), done: !!d.done,
@@ -202,13 +214,13 @@
     };
   }
 
-  /** Chia theo ngưỡng: dưới ngưỡng là người truyền (trừ người có chức vụ nếu `keepRoles`), còn lại ở lại. */
+  /** Chia theo ngưỡng: dưới ngưỡng là người truyền (trừ người bị khóa, và người có chức vụ nếu `keepRoles`), còn lại ở lại. */
   function splitByThreshold(data, threshold, keepRoles) {
     const t = Number(threshold);
     const donors = [];
     const survivors = [];
     data.disciples.forEach((d) => {
-      const out = Number.isFinite(t) && d.total < t && !(keepRoles && d.role);
+      const out = Number.isFinite(t) && d.total < t && !(keepRoles && d.role) && !d.locked;
       (out ? donors : survivors).push(d);
     });
     return { donors: sortedByTotal(donors), survivors: sortedByTotal(survivors) };
@@ -342,7 +354,9 @@
   /** Áp dụng cả kế hoạch vào sổ trong một lần (hoàn tác một lần). Từ chối nếu dữ liệu đã đổi so với lúc lập kế hoạch. */
   function applyPlan(data, plan) {
     const ids = new Set(data.disciples.map((d) => d.id));
+    const locked = new Set(data.disciples.filter((d) => d.locked).map((d) => d.id));
     const order = plan.steps.map((s) => s.src).concat(plan.retire);
+    if (order.some((id) => locked.has(id))) return { ok: false, data };
     if (!plan.steps.every((s) => ids.has(s.src) && ids.has(s.rec)) || !plan.retire.every((id) => ids.has(id))) return { ok: false, data };
     const next = withHistory(data, (d) => {
       plan.steps.forEach((s) => {
@@ -384,5 +398,5 @@
     return { ok: true, data: next, disciples: clean.disciples.length, expelled: clean.expelled.length };
   }
 
-  return { exportJson, importJson, SKILLS, MAX_LEVEL, ROLES, ELDER_ROLES, roleBonus, totalAfterRole, assignRole, unassignRole, emptyData, newId, clampLevel, gain, rank, sortedByTotal, transfer, retire, buildPlans, applyPlan, splitByThreshold, undo, upsert, remove, toggleDone, clearExpelled, sanitize };
+  return { exportJson, importJson, SKILLS, MAX_LEVEL, ROLES, ELDER_ROLES, roleBonus, totalAfterRole, assignRole, unassignRole, setLocked, emptyData, newId, clampLevel, gain, rank, sortedByTotal, transfer, retire, buildPlans, applyPlan, splitByThreshold, undo, upsert, remove, toggleDone, clearExpelled, sanitize };
 });

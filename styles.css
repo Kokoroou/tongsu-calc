@@ -334,3 +334,6 @@ h1,h2,h3{font-family:var(--font-display);margin:0;font-weight:700;letter-spacing
 .check-fld{flex-direction:row;align-items:center;gap:var(--s2);cursor:pointer;font-weight:600}
 .check-fld input{width:20px;min-height:20px;flex:none;accent-color:var(--seal)}
 .plan>.btn{align-self:stretch}
+
+.ibtn.lockbtn.on{background:var(--btn-p-bg);color:var(--on-seal);border-color:transparent}
+.card.locked{border-style:dashed}
