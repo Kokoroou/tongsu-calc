@@ -284,3 +284,25 @@ test('applyPlan: danh sách chờ trục xuất được sắp theo giá trị t
   assert.deepEqual(totals, [...totals].sort((x, y) => x - y));
   assert.equal(r.data.expelled.find((e) => e.id === 'old').done, true);
 });
+
+test('khóa đệ tử: không thể truyền/trục xuất nhưng vẫn nhận công, hoàn tác được', () => {
+  let d = { ...L.emptyData(), disciples: [mk('a', 100, lv(5)), mk('b', 100, lv(1))] };
+  d = L.setLocked(d, 'a', true);
+  assert.equal(d.disciples[0].locked, true);
+  assert.equal(L.transfer(d, 'a', 'b').ok, false);
+  assert.equal(L.retire(d, 'a'), d);
+  assert.equal(L.transfer(d, 'b', 'a').ok, true);
+  assert.ok(!L.undo(d).disciples[0].locked);
+  assert.equal(L.setLocked(d, 'a', true), d);
+});
+
+test('khóa đệ tử: giữ qua sửa, sanitize; kế hoạch không trục xuất người bị khóa', () => {
+  let d = { ...L.emptyData(), disciples: [mk('lo', 100, lv(5)), mk('hi', 300, lv(1))] };
+  d = L.setLocked(d, 'lo', true);
+  d = L.upsert(d, { id: 'lo', name: 'lo', total: 100, levels: lv(5) });
+  assert.equal(d.disciples[0].locked, true);
+  assert.equal(L.sanitize(JSON.parse(JSON.stringify(d))).disciples[0].locked, true);
+  const r = L.buildPlans(d, 250, false);
+  assert.equal(r.donors, 0);
+  assert.equal(L.applyPlan(d, { steps: [{ src: 'lo', rec: 'hi', gain: 1, by: [] }], retire: [], gain: 1, stepCount: 1 }).ok, false);
+});
