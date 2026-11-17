@@ -58,8 +58,26 @@
     }).sort((a, b) => (a.id === '') - (b.id === '') || a.id.localeCompare(b.id, 'vi'));
   }
 
+  const META_PREFIX = 'tlts-sync-meta:';
+
+  /** Trạng thái đồng bộ của một sổ: rev máy chủ mà bản này dựa vào, và có thay đổi chưa đẩy lên không. */
+  function loadMeta(id, nonEmpty) {
+    try {
+      const m = JSON.parse(root.localStorage.getItem(META_PREFIX + cleanId(id)));
+      if (m && Number.isInteger(m.rev) && m.rev >= 0) return { rev: m.rev, dirty: !!m.dirty };
+    } catch (e) { /* dùng mặc định */ }
+    return { rev: 0, dirty: !!nonEmpty }; // chưa từng đồng bộ: dữ liệu có sẵn coi như chưa đẩy lên
+  }
+
+  function saveMeta(id, meta) {
+    try { root.localStorage.setItem(META_PREFIX + cleanId(id), JSON.stringify(meta)); } catch (e) { /* bỏ qua */ }
+  }
+
   function removeProfile(id) {
-    try { root.localStorage.removeItem(keyOf(cleanId(id))); } catch (e) { /* bỏ qua */ }
+    try {
+      root.localStorage.removeItem(keyOf(cleanId(id)));
+      root.localStorage.removeItem(META_PREFIX + cleanId(id));
+    } catch (e) { /* bỏ qua */ }
   }
 
   const PREFS_KEY = 'tlts-truyen-cong-plan-v1';
@@ -80,5 +98,5 @@
     try { root.localStorage.setItem(PREFS_KEY, JSON.stringify(p)); } catch (e) { /* bỏ qua */ }
   }
 
-  root.Store = { cleanId, getActive, setActive, load, save, listProfiles, removeProfile, loadPrefs, savePrefs };
+  root.Store = { cleanId, getActive, setActive, load, save, listProfiles, removeProfile, loadMeta, saveMeta, loadPrefs, savePrefs };
 })(window);

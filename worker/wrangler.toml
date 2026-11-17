@@ -1,0 +1,12 @@
+name = "tongsu-sync"
+main = "index.js"
+compatibility_date = "2025-01-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "tongsu"
+database_id = "THAY-BANG-ID-SAU-KHI-TAO-D1"
+
+[vars]
+# Origin được phép gọi API, ví dụ "https://kokoroou.github.io". "*" = mọi nơi.
+ALLOW_ORIGIN = "*"

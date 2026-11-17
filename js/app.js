@@ -14,13 +14,91 @@
 
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-  function setData(next) { data = next; window.Store.save(data, gameId); }
+  const SY = window.Sync;
+  const isEmpty = (d) => !d.disciples.length && !d.expelled.length;
+  let meta = window.Store.loadMeta(gameId, !isEmpty(data));
+  let sync = { state: 'idle', conflict: null, busy: false, timer: null, again: false };
+  const SAFE_VIEWS = ['roster', 'roles', 'expelled', 'theme', 'data'];
+  const SYNC_TEXT = { idle: 'Đã đồng bộ', syncing: 'Đang đồng bộ…', error: 'Chưa đồng bộ được, sẽ thử lại', conflict: 'Hai thiết bị cùng thay đổi, cần chọn bản' };
+
+  function setSync(state) {
+    sync.state = state;
+    const chip = document.querySelector('.idchip');
+    if (chip) { chip.dataset.sync = state; chip.title = SYNC_TEXT[state] || ''; }
+  }
+  function refreshSafe() {
+    if (!SAFE_VIEWS.includes(view.name)) view = { name: 'roster' };
+    render();
+  }
+  function scheduleSync(ms) {
+    if (!SY.enabled() || !gameId) return;
+    clearTimeout(sync.timer);
+    sync.timer = setTimeout(syncNow, ms == null ? 1000 : ms);
+  }
+  /** Kéo bản máy chủ về rồi quyết định: giữ nguyên, đẩy lên, lấy về, hoặc báo xung đột. */
+  async function syncNow() {
+    if (!SY.enabled() || !gameId || sync.conflict) return;
+    if (sync.busy) { sync.again = true; return; }
+    const id = gameId;
+    sync.busy = true;
+    setSync('syncing');
+    try {
+      const remote = await SY.pull(id);
+      if (id !== gameId) return;
+      const act = SY.decide({ rev: meta.rev, dirty: meta.dirty, empty: isEmpty(data) }, remote);
+      if (act === 'adopt') { adoptRemote(remote); }
+      else if (act === 'conflict') { sync.conflict = remote; }
+      else if (act === 'push') {
+        const snap = data;
+        const r = await SY.push(id, remote.rev, data);
+        if (id !== gameId) return;
+        if (r.ok) { meta = { rev: r.rev, dirty: data !== snap }; window.Store.saveMeta(id, meta); if (meta.dirty) sync.again = true; }
+        else sync.conflict = r.remote;
+      }
+      setSync(sync.conflict ? 'conflict' : 'idle');
+      if (sync.conflict) refreshSafe();
+    } catch (e) {
+      if (id === gameId) { setSync('error'); sync.again = false; scheduleSync(15000); }
+    } finally {
+      sync.busy = false;
+      if (sync.again && !sync.conflict) { sync.again = false; scheduleSync(300); }
+    }
+  }
+  function adoptRemote(remote) {
+    const clean = window.Logic.sanitize({ disciples: remote.data.disciples, expelled: remote.data.expelled });
+    data = { ...clean, history: [] };
+    window.Store.save(data, gameId);
+    meta = { rev: remote.rev, dirty: false };
+    window.Store.saveMeta(gameId, meta);
+    hideToast();
+    refreshSafe();
+  }
+  function resolveConflict(useRemote) {
+    const remote = sync.conflict;
+    sync.conflict = null;
+    if (useRemote) adoptRemote(remote);
+    else { meta = { rev: remote.rev, dirty: true }; window.Store.saveMeta(gameId, meta); render(); scheduleSync(0); }
+  }
+
+  function setData(next) {
+    data = next;
+    window.Store.save(data, gameId);
+    meta = { rev: meta.rev, dirty: true };
+    window.Store.saveMeta(gameId, meta);
+    scheduleSync();
+  }
   const idLabel = (id) => (id ? esc(id) : 'Chưa đặt ID');
   /** Chuyển sang sổ của một game ID (tạo mới nếu chưa có). */
   function switchProfile(id) {
     gameId = window.Store.cleanId(id);
     window.Store.setActive(gameId);
     data = window.Store.load(gameId);
+    meta = window.Store.loadMeta(gameId, !isEmpty(data));
+    sync.conflict = null;
+    sync.again = false;
+    clearTimeout(sync.timer);
+    setSync('idle');
+    scheduleSync(0);
     hideToast();
   }
   function go(v) {
@@ -68,6 +146,14 @@
       ${t('roster', 'people', 'Đệ tử', data.disciples.length)}${t('roles', 'crown', 'Chức vụ', data.disciples.filter((d) => d.role).length)}${t('expelled', 'door', 'Chờ trục xuất', data.expelled.length)}${t('theme', 'palette', 'Giao diện')}</nav>`;
   }
 
+  function conflictBanner() {
+    if (!sync.conflict) return '';
+    const n = sync.conflict.data ? sync.conflict.data.disciples.length : 0;
+    return `<div class="card conflict" role="alert"><p class="note"><b>Hai thiết bị cùng thay đổi sổ này.</b> Bản trên máy chủ có ${n} đệ tử, bản trên máy này có ${data.disciples.length}. Chọn bản giữ lại:</p>
+      <div class="grid2"><button class="btn" data-act="sync-remote">${I('download', 16)}<span>Dùng bản máy chủ</span></button>
+      <button class="btn primary" data-act="sync-local">${I('upload', 16)}<span>Dùng bản máy này</span></button></div></div>`;
+  }
+
   function rosterView() {
     const list = L.sortedByTotal(data.disciples);
     const body = list.length
@@ -77,8 +163,8 @@
             ${iconBtn('edit', 'edit', 'Sửa ' + esc(d.name), `data-id="${d.id}"`)}</div>
           ${cells(d.levels)}</article>`).join('') + '</div>'
       : `<div class="empty">${I('scroll', 42)}<p>Thêm đệ tử đầu tiên</p><button class="btn primary" data-act="add">${I('plus', 16)}Thêm</button></div>`;
-    return `<header class="top"><h1>Đệ tử</h1><button class="idchip" data-act="profiles" aria-label="Game ID hiện tại: ${gameId ? esc(gameId) : 'chưa đặt'}. Bấm để đổi" title="Đổi game ID">${I('user', 16)}<span>${idLabel(gameId)}</span></button><div class="grow"></div>${list.length ? `<button class="btn primary add-wide" data-act="add">${I('plus', 16)}Thêm đệ tử</button>` : ''}${list.length > 1 ? iconBtn('plan', 'plan', 'Gợi ý kế hoạch truyền công') : ''}${iconBtn('data', 'data', 'Sao lưu / khôi phục')}${undoBtn()}</header>
-      <main class="main">${body}</main>
+    return `<header class="top"><h1>Đệ tử</h1><button class="idchip" data-act="profiles" aria-label="Game ID hiện tại: ${gameId ? esc(gameId) : 'chưa đặt'}. Bấm để đổi" title="${SY.enabled() && gameId ? SYNC_TEXT[sync.state] : 'Đổi game ID'}" data-sync="${SY.enabled() && gameId ? sync.state : 'off'}">${I('user', 16)}<span>${idLabel(gameId)}</span><i class="sdot" aria-hidden="true"></i></button><div class="grow"></div>${list.length ? `<button class="btn primary add-wide" data-act="add">${I('plus', 16)}Thêm đệ tử</button>` : ''}${list.length > 1 ? iconBtn('plan', 'plan', 'Gợi ý kế hoạch truyền công') : ''}${iconBtn('data', 'data', 'Sao lưu / khôi phục')}${undoBtn()}</header>
+      <main class="main">${conflictBanner()}${body}</main>
       ${list.length ? `<button class="fab" data-act="add" aria-label="Thêm đệ tử">${I('plus', 26)}</button>` : ''}`;
   }
 
@@ -353,6 +439,8 @@
       case 'tab-roster': case 'back': go({ name: 'roster' }); break;
       case 'data': go({ name: 'data' }); break;
       case 'profiles': go({ name: 'profiles' }); break;
+      case 'sync-remote': resolveConflict(true); break;
+      case 'sync-local': resolveConflict(false); break;
       case 'open-id': {
         const id = window.Store.cleanId(document.getElementById('g-id').value);
         if (!id) { go({ name: 'profiles', msg: 'Nhập game ID.' }); break; }
@@ -480,6 +568,11 @@
     if (view.name === 'edit') { e.preventDefault(); saveEdit(); }
     else if (view.name === 'roster') { e.preventDefault(); hideToast(); go({ name: 'edit', id: null }); }
   });
+
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) scheduleSync(0); });
+  window.addEventListener('focus', () => scheduleSync(0));
+  setInterval(() => { if (!document.hidden && !sync.conflict) scheduleSync(0); }, 30000);
+  scheduleSync(0);
 
   T.onChange(() => { if (view.name === 'theme') render(); });
   render();

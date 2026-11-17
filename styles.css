@@ -342,3 +342,11 @@ h1,h2,h3{font-family:var(--font-display);margin:0;font-weight:700;letter-spacing
 .idchip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .idchip:focus-visible{outline:2px solid var(--focus);outline-offset:1px}
 .ibtn.armed{color:var(--danger,#b3261e)}
+
+.sdot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--mute)}
+.idchip[data-sync=off] .sdot{display:none}
+.idchip[data-sync=idle] .sdot{background:var(--ok,#2e7d32)}
+.idchip[data-sync=syncing] .sdot{background:var(--mute);animation:pulse .6s ease-in-out infinite}
+.idchip[data-sync=error] .sdot,.idchip[data-sync=conflict] .sdot{background:var(--danger,#b3261e)}
+.conflict{margin-bottom:var(--s2)}
+@media (prefers-reduced-motion:reduce){.idchip .sdot{animation:none!important}}
