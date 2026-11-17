@@ -337,3 +337,8 @@ h1,h2,h3{font-family:var(--font-display);margin:0;font-weight:700;letter-spacing
 
 .ibtn.lockbtn.on{background:var(--btn-p-bg);color:var(--on-seal);border-color:transparent}
 .card.locked{border-style:dashed}
+
+.idchip{display:inline-flex;align-items:center;gap:var(--s1);margin-left:var(--s2);max-width:46%;min-height:36px;padding:2px var(--s2);border:1px solid var(--bd);border-radius:99px;background:var(--ctl-bg);color:inherit;font:inherit;font-size:var(--t0);font-weight:600;cursor:pointer}
+.idchip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.idchip:focus-visible{outline:2px solid var(--focus);outline-offset:1px}
+.ibtn.armed{color:var(--danger,#b3261e)}

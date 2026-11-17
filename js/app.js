@@ -3,7 +3,8 @@
   const T = window.Theme;
   const I = (n, s) => window.Icons.svg(n, s);
   const app = document.getElementById('app');
-  let data = window.Store.load();
+  let gameId = window.Store.getActive();
+  let data = window.Store.load(gameId);
   let view = { name: 'roster' };
   let prefs = window.Store.loadPrefs();
   let planCache = { data: null, key: '', value: null };
@@ -13,7 +14,15 @@
 
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-  function setData(next) { data = next; window.Store.save(data); }
+  function setData(next) { data = next; window.Store.save(data, gameId); }
+  const idLabel = (id) => (id ? esc(id) : 'Chưa đặt ID');
+  /** Chuyển sang sổ của một game ID (tạo mới nếu chưa có). */
+  function switchProfile(id) {
+    gameId = window.Store.cleanId(id);
+    window.Store.setActive(gameId);
+    data = window.Store.load(gameId);
+    hideToast();
+  }
   function go(v) {
     view = v; render(); window.scrollTo(0, 0);
     if (v.name === 'edit') { const n = document.getElementById('f-name'); if (n) n.focus(); }
@@ -52,7 +61,7 @@
   const ROOT_VIEWS = ['roster', 'roles', 'expelled', 'theme'];
   /** Thanh điều hướng: dưới cùng trên điện thoại, cột bên trên màn rộng. Thẻ đang mở sáng lên cả khi ở màn con. */
   function tabs(active) {
-    const parent = { transfer: 'roster', edit: 'roster', data: 'roster', plan: 'roster', 'role-pick': 'roles' }[active] || active;
+    const parent = { transfer: 'roster', edit: 'roster', data: 'roster', profiles: 'roster', plan: 'roster', 'role-pick': 'roles' }[active] || active;
     const t = (key, icon, label, n) =>
       `<button data-act="tab-${key}" class="${parent === key ? 'on' : ''}" ${parent === key ? 'aria-current="page"' : ''} aria-label="${label}">${I(icon, 26)}<span>${label}</span><em>${n === undefined ? '' : n}</em></button>`;
     return `<nav class="tabs" aria-label="Điều hướng"><div class="brand" aria-hidden="true">${I('scroll', 26)}<span>Sổ Truyền Công</span></div>
@@ -68,7 +77,7 @@
             ${iconBtn('edit', 'edit', 'Sửa ' + esc(d.name), `data-id="${d.id}"`)}</div>
           ${cells(d.levels)}</article>`).join('') + '</div>'
       : `<div class="empty">${I('scroll', 42)}<p>Thêm đệ tử đầu tiên</p><button class="btn primary" data-act="add">${I('plus', 16)}Thêm</button></div>`;
-    return `<header class="top"><h1>Đệ tử</h1><div class="grow"></div>${list.length ? `<button class="btn primary add-wide" data-act="add">${I('plus', 16)}Thêm đệ tử</button>` : ''}${list.length > 1 ? iconBtn('plan', 'plan', 'Gợi ý kế hoạch truyền công') : ''}${iconBtn('data', 'data', 'Sao lưu / khôi phục')}${undoBtn()}</header>
+    return `<header class="top"><h1>Đệ tử</h1><button class="idchip" data-act="profiles" aria-label="Game ID hiện tại: ${gameId ? esc(gameId) : 'chưa đặt'}. Bấm để đổi" title="Đổi game ID">${I('user', 16)}<span>${idLabel(gameId)}</span></button><div class="grow"></div>${list.length ? `<button class="btn primary add-wide" data-act="add">${I('plus', 16)}Thêm đệ tử</button>` : ''}${list.length > 1 ? iconBtn('plan', 'plan', 'Gợi ý kế hoạch truyền công') : ''}${iconBtn('data', 'data', 'Sao lưu / khôi phục')}${undoBtn()}</header>
       <main class="main">${body}</main>
       ${list.length ? `<button class="fab" data-act="add" aria-label="Thêm đệ tử">${I('plus', 26)}</button>` : ''}`;
   }
@@ -236,6 +245,23 @@
       </main>`;
   }
 
+  function profilesView() {
+    const list = window.Store.listProfiles();
+    const rows = list.map((p) => `<article class="card${p.id === gameId ? ' best' : ''}"><div class="head">
+        <button class="pick" data-act="use-profile" data-id="${esc(p.id)}" aria-label="Dùng sổ của ${p.id ? esc(p.id) : 'chưa đặt ID'}"><span class="ident"><span class="name">${idLabel(p.id)}</span><span class="total" title="Số đệ tử">${I('people', 16)}${p.disciples}</span></span></button>
+        ${p.id === gameId ? `<span class="gain" aria-label="Đang dùng">${I('check', 16)}</span>` : `<button class="ibtn" data-act="del-profile" data-id="${esc(p.id)}" aria-label="Xóa sổ ${p.id ? esc(p.id) : 'chưa đặt ID'}" title="Xóa sổ này">${I('trash', 26)}</button>`}</div></article>`).join('');
+    return `<header class="top">${iconBtn('back', 'back', 'Quay lại')}<h2>Game ID</h2><div class="grow"></div></header>
+      <main class="main narrow">
+        <p class="note">Mỗi game ID có một sổ riêng trong trình duyệt này, nên có thể quản lý nhiều tài khoản game. Nhập ID chưa có để tạo sổ mới.</p>
+        <div class="form"><div class="grid2">
+          <div class="fld"><label for="g-id">${I('user', 16)}<span>Game ID</span></label><input id="g-id" type="text" autocomplete="off" maxlength="40" placeholder="Ví dụ: 12345678"></div>
+          <button class="btn primary" data-act="open-id">${I('check', 16)}<span>Mở / tạo sổ</span></button>
+        </div></div>
+        <div class="msg" id="g-msg" role="status">${esc(view.msg || '')}</div>
+        <div class="grid">${rows}</div>
+      </main>`;
+  }
+
   function themeView() {
     const cur = T.get();
     const sch = T.scheme();
@@ -271,7 +297,7 @@
     const blob = new Blob([L.exportJson(data)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'so-truyen-cong-' + new Date().toISOString().slice(0, 10) + '.json';
+    a.download = 'so-truyen-cong-' + (gameId ? gameId.replace(/[^\w.-]+/g, '_') + '-' : '') + new Date().toISOString().slice(0, 10) + '.json';
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -291,7 +317,7 @@
   }
 
   function render() {
-    const html = { roster: rosterView, transfer: transferView, plan: planView, roles: rolesView, 'role-pick': rolePickView, expelled: expelledView, edit: editView, data: dataView, theme: themeView }[view.name]();
+    const html = { roster: rosterView, transfer: transferView, plan: planView, roles: rolesView, 'role-pick': rolePickView, expelled: expelledView, edit: editView, data: dataView, profiles: profilesView, theme: themeView }[view.name]();
     app.classList.toggle('lift', !!toast);
     app.classList.toggle('sub', !ROOT_VIEWS.includes(view.name)); // màn con: ẩn thanh dưới trên điện thoại
     if (view.name === 'theme') T.preloadFonts();
@@ -326,6 +352,20 @@
     switch (t.dataset.act) {
       case 'tab-roster': case 'back': go({ name: 'roster' }); break;
       case 'data': go({ name: 'data' }); break;
+      case 'profiles': go({ name: 'profiles' }); break;
+      case 'open-id': {
+        const id = window.Store.cleanId(document.getElementById('g-id').value);
+        if (!id) { go({ name: 'profiles', msg: 'Nhập game ID.' }); break; }
+        switchProfile(id);
+        go({ name: 'roster' });
+        break;
+      }
+      case 'use-profile': switchProfile(t.dataset.id); go({ name: 'roster' }); break;
+      case 'del-profile':
+        if (!armed(t, '')) { t.setAttribute('aria-label', 'Bấm lần nữa để xóa sổ này'); t.title = 'Bấm lần nữa để xóa sổ này'; break; }
+        window.Store.removeProfile(t.dataset.id);
+        go({ name: 'profiles', msg: 'Đã xóa sổ.' });
+        break;
       case 'export': doExport(); break;
       case 'import': {
         if (data.disciples.length + data.expelled.length && !armed(t, 'Bấm lần nữa để thay dữ liệu hiện tại')) break;
